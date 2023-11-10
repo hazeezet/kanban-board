@@ -1,113 +1,325 @@
-import Image from 'next/image'
+"use client";
+
+import { DndContext, DragEndEvent, DragOverEvent, DragOverlay, DragStartEvent, PointerSensor, useSensor, useSensors, KeyboardSensor, MouseSensor, TouchSensor } from "@dnd-kit/core";
+import { useEffect, useId, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import { SortableContext } from "@dnd-kit/sortable";
+import { Column, Task } from "@palette/board/type";
+import BoardColumn from "@palette/board/column";
+import BoardTask from "@palette/board/task";
+import Header from "@palette/header";
+import { useBoard } from "@palette/board/state";
+
+const defaultColumn: Column[] = [
+    {
+        id: "todo",
+        title: "Todo",
+    },
+    {
+        id: "progress",
+        title: "In progress",
+    },
+    {
+        id: "done",
+        title: "Done",
+    },
+]
+
+const defaultTask: Task[] = [
+    {
+        id: "1",
+        columnId: "todo",
+        title: "selection of category",
+        category: {
+            content: "awaiting",
+            background: getRandomColor()
+        },
+        description: "ability to select and change category instead of typing",
+        dueDate: "Oct 08, 2023"
+    },
+    {
+        id: "2",
+        columnId: "todo",
+        title: "Custom category color",
+        category: {
+            content: "awaiting",
+            background: getRandomColor()
+        },
+        description: "Each category should have different color, should support both light and dark mode",
+        dueDate: "Nov 18, 2023"
+    },
+    {
+        id: "3",
+        columnId: "progress",
+        title: "Fix light mode theme",
+        category: {
+            content: "doing",
+            background: getRandomColor()
+        },
+        description: "Light theme color is yet to be done, though it is supported. fix it",
+        dueDate: "Nov 18, 2023"
+    },
+    {
+        id: "4",
+        columnId: "done",
+        title: "Task board",
+        category: {
+            content: "doing",
+            background: getRandomColor()
+        },
+        description: "columns representing different stages of task completion (e.g., To-Do, In Progress, Done",
+        dueDate: "Nov 18, 2023"
+    },
+    {
+        id: "5",
+        columnId: "done",
+        title: "add tasks to the board",
+        category: {
+            content: "doing",
+            background: getRandomColor()
+        },
+        description: "Each task should have a title, description, category, and due date",
+        dueDate: "Nov 18, 2023"
+    },
+    {
+        id: "6",
+        columnId: "done",
+        title: "edit and delete tasks",
+        category: {
+            content: "doing",
+            background: getRandomColor()
+        },
+        description: "User should able to edit and delete task",
+        dueDate: "Nov 18, 2023"
+    },
+    {
+        id: "7",
+        columnId: "done",
+        title: "Due Dates",
+        category: {
+            content: "doing",
+            background: getRandomColor()
+        },
+        description: "Implement a calendar or date picker for setting due dates for tasks. • Highlight overdue tasks for better visibility.",
+        dueDate: "Nov 18, 2023"
+    },
+    {
+        id: "8",
+        columnId: "done",
+        title: "Drag-and-Drop",
+        category: {
+            content: "doing",
+            background: getRandomColor()
+        },
+        description: "Implement drag-and-drop functionality to allow users to move tasks between different columns",
+        dueDate: "Nov 18, 2023"
+    },
+]
 
 export default function Home() {
-  return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-24">
-      <div className="z-10 max-w-5xl w-full items-center justify-between font-mono text-sm lg:flex">
-        <p className="fixed left-0 top-0 flex w-full justify-center border-b border-gray-300 bg-gradient-to-b from-zinc-200 pb-6 pt-8 backdrop-blur-2xl dark:border-neutral-800 dark:bg-zinc-800/30 dark:from-inherit lg:static lg:w-auto  lg:rounded-xl lg:border lg:bg-gray-200 lg:p-4 lg:dark:bg-zinc-800/30">
-          Get started by editing&nbsp;
-          <code className="font-mono font-bold">src/app/page.tsx</code>
-        </p>
-        <div className="fixed bottom-0 left-0 flex h-48 w-full items-end justify-center bg-gradient-to-t from-white via-white dark:from-black dark:via-black lg:static lg:h-auto lg:w-auto lg:bg-none">
-          <a
-            className="pointer-events-none flex place-items-center gap-2 p-8 lg:pointer-events-auto lg:p-0"
-            href="https://vercel.com?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            By{' '}
-            <Image
-              src="/vercel.svg"
-              alt="Vercel Logo"
-              className="dark:invert"
-              width={100}
-              height={24}
-              priority
-            />
-          </a>
+    const [columns, tasks, newColumn, sortColumn, sortTask, setBoard] = useBoard(state => [state.columns, state.tasks, state.newColumn, state.sortColumn, state.sortTask, state.setBoard]);
+
+    const [mount, setMount] = useState(false);
+
+    const columnsId = useMemo(() => columns.map((col) => col.id), [columns]);
+
+    const [activeColumn, setActiveColumn] = useState<Column | null>(null);
+
+    const [activeTask, setActiveTask] = useState<Task | null>(null);
+
+    useEffect(() => {
+        const storedData = localStorage.getItem("BoardData");
+        const taskData = storedData ? JSON.parse(storedData) as { columns: Column[], tasks: Task[] } : { tasks: defaultTask, columns: defaultColumn };
+        setBoard(taskData);
+        setTimeout(() => setMount(true), 2000);
+    }, [])
+
+    const sensors = useSensors(
+        useSensor(MouseSensor),
+        useSensor(TouchSensor),
+        useSensor(PointerSensor, {
+            activationConstraint: {
+                distance: 10,
+            },
+        })
+    );
+    const id = useId()
+
+    return (
+        <div className="min-h-screen">
+            <Header />
+
+            {!mount && (
+                <div className="h-screen w-full flex justify-center items-center">
+                    <span className="loading loading-dots loading-md"></span>
+                </div>
+            )}
+
+            {mount && (
+                <div className="mt-20 w-full mx-auto">
+                    <main className="">
+
+                        <div className="m-auto flex h-max w-full items-center overflow-x-auto custom-scroll overflow-y-hidden px-40 pb-20">
+                            <DndContext
+                                id={id}
+                                sensors={sensors}
+                                onDragStart={onDragStart}
+                                onDragEnd={onDragEnd}
+                                onDragOver={onDragOver}
+                            >
+                                <div className="m-auto flex gap-4">
+                                    <div className="flex gap-4">
+                                        <SortableContext items={columnsId}>
+                                            {columns.map((col, index) => (
+                                                <BoardColumn
+                                                    key={col.id}
+                                                    column={col}
+                                                    columnIndex={index}
+                                                    tasks={tasks.filter((task) => task.columnId === col.id)}
+                                                />
+                                            ))}
+                                        </SortableContext>
+                                    </div>
+                                    <button
+                                        onClick={newColumn}
+                                        className="h-[60px] w-[350px] min-w-[350px] cursor-pointer rounded-lg bg-mainBackgroundColor border-2 border-columnBackgroundColor p-4 ring-rose-500 hover:ring-2 flex gap-2 "
+                                    >
+                                        <svg
+                                            xmlns="http://www.w3.org/2000/svg"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            strokeWidth={1.5}
+                                            stroke="currentColor"
+                                            className="w-6 h-6"
+                                        >
+                                            <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                d="M12 9v6m3-3H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"
+                                            />
+                                        </svg>
+                                        Add Column
+                                    </button>
+                                </div>
+
+                                {mount && createPortal(
+                                    <DragOverlay>
+                                        {activeColumn && (
+                                            <BoardColumn
+                                                column={activeColumn}
+                                                columnIndex={-0}
+                                                tasks={tasks.filter(
+                                                    (task) => task.columnId === activeColumn.id
+                                                )}
+                                            />
+                                        )}
+                                        {activeTask && (
+                                            <BoardTask
+                                                task={activeTask}
+                                                taskIndex={-0}
+                                            />
+                                        )}
+                                    </DragOverlay>,
+                                    document.body
+                                )}
+                            </DndContext>
+                        </div>
+                    </main>
+                </div>
+            )}
+
         </div>
-      </div>
 
-      <div className="relative flex place-items-center before:absolute before:h-[300px] before:w-[480px] before:-translate-x-1/2 before:rounded-full before:bg-gradient-radial before:from-white before:to-transparent before:blur-2xl before:content-[''] after:absolute after:-z-20 after:h-[180px] after:w-[240px] after:translate-x-1/3 after:bg-gradient-conic after:from-sky-200 after:via-blue-200 after:blur-2xl after:content-[''] before:dark:bg-gradient-to-br before:dark:from-transparent before:dark:to-blue-700 before:dark:opacity-10 after:dark:from-sky-900 after:dark:via-[#0141ff] after:dark:opacity-40 before:lg:h-[360px] z-[-1]">
-        <Image
-          className="relative dark:drop-shadow-[0_0_0.3rem_#ffffff70] dark:invert"
-          src="/next.svg"
-          alt="Next.js Logo"
-          width={180}
-          height={37}
-          priority
-        />
-      </div>
+    )
 
-      <div className="mb-32 grid text-center lg:max-w-5xl lg:w-full lg:mb-0 lg:grid-cols-4 lg:text-left">
-        <a
-          href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Docs{' '}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Find in-depth information about Next.js features and API.
-          </p>
-        </a>
+    function onDragStart(event: DragStartEvent) {
+        if (event.active.data.current?.type === "Column") {
+            setActiveColumn(event.active.data.current.column);
+            return;
+        }
 
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Learn{' '}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Learn about Next.js in an interactive course with&nbsp;quizzes!
-          </p>
-        </a>
+        if (event.active.data.current?.type === "Task") {
+            setActiveTask(event.active.data.current.task);
+            return;
+        }
+    }
 
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Templates{' '}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Explore the Next.js 13 playground.
-          </p>
-        </a>
+    function onDragEnd(event: DragEndEvent) {
+        setActiveColumn(null);
+        setActiveTask(null);
 
-        <a
-          href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Deploy{' '}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Instantly deploy your Next.js site to a shareable URL with Vercel.
-          </p>
-        </a>
-      </div>
-    </main>
-  )
+        const { active, over } = event;
+        if (!over) return;
+
+        const activeId = active.id;
+        const overId = over.id;
+
+        if (activeId === overId) return;
+
+        const isActiveAColumn = active.data.current?.type === "Column";
+        if (!isActiveAColumn) return;
+
+        sortColumn(activeId, overId)
+    }
+
+    function onDragOver(event: DragOverEvent) {
+        const { active, over } = event;
+        if (!over) return;
+
+        const activeId = active.id;
+        const overId = over.id;
+
+        if (activeId === overId) return;
+
+        const isActiveATask = active.data.current?.type === "Task";
+        const isOverATask = over.data.current?.type === "Task";
+
+        if (!isActiveATask) return;
+
+        // Im dropping a Task over another Task
+        if (isActiveATask && isOverATask) {
+
+            const activeIndex = tasks.findIndex((t) => t.id === activeId);
+            const overIndex = tasks.findIndex((t) => t.id === overId);
+
+            if (tasks[activeIndex].columnId != tasks[overIndex].columnId) {
+                // Fix introduced after video recording
+                tasks[activeIndex].columnId = tasks[overIndex].columnId;
+                sortTask(activeIndex, overIndex - 1)
+            }
+
+            sortTask(activeIndex, overIndex);
+
+        }
+
+        const isOverAColumn = over.data.current?.type === "Column";
+
+        // Im dropping a Task over a column
+        if (isActiveATask && isOverAColumn) {
+            const activeIndex = tasks.findIndex((t) => t.id === activeId);
+
+            tasks[activeIndex].columnId = overId;
+            sortTask(activeIndex, activeIndex);
+
+        }
+    }
+}
+
+//TODO:
+function getRandomColor() {
+    const randomColor = () => Math.floor(Math.random() * 256);
+
+    const luminance = (r: number, g: number, b: number) => (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  
+    const color = `rgb(${randomColor()}, ${randomColor()}, ${randomColor()})`;
+    const [r, g, b] = color.match(/\d+/g)?.map(Number) as unknown as number[];
+    const isLight = luminance(r, g, b) > 0.5;
+
+    // Adjust luminance for better contrast
+    const adjustedLuminance = isLight ? luminance(r, g, b) - 0.2 : luminance(r, g, b) + 0.2;
+
+    // Convert back to RGB
+    const adjustedColor = `rgb(${Math.round(r * adjustedLuminance)}, ${Math.round(g * adjustedLuminance)}, ${Math.round(b * adjustedLuminance)})`;
+
+    return adjustedColor;
 }
